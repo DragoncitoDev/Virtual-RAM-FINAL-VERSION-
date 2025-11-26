@@ -1,0 +1,608 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Memoria Virtual - Control de Velocidad</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .container { max-width: 1600px; margin: 0 auto; }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .controls { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
+            display: inline-block;
+            position: relative;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        button, select {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border: none; padding: 10px 25px;
+            font-size: 16px; border-radius: 20px; cursor: pointer; margin: 0 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: transform 0.2s;
+            outline: none;
+        }
+        
+        select {
+            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        button:hover, select:hover { transform: translateY(-2px); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .label-speed { font-weight: bold; margin-right: 5px; }
+
+        .simulation-area {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .memory-component {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px; padding: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+
+        .component-title {
+            text-align: center; font-size: 1.5em; margin-bottom: 15px; font-weight: bold;
+        }
+
+        .cpu-grid, .cache-grid, .ram-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;
+        }
+
+        .hdd-grid {
+            display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 10px;
+            max-height: 400px; overflow-y: auto;
+        }
+
+        .memory-cell {
+            aspect-ratio: 1;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: bold;
+            transition: all 0.3s ease; position: relative; overflow: hidden; padding: 5px;
+        }
+
+        .memory-cell.empty { background: rgba(255,255,255,0.05); }
+
+        .cell-order {
+            position: absolute; top: 2px; right: 2px;
+            background: rgba(0,0,0,0.7); color: white;
+            border-radius: 50%; width: 20px; height: 20px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: bold;
+        }
+
+        .cell-content { text-align: center; font-size: 10px; word-wrap: break-word; }
+
+        .virtual-memory-section { grid-column: 1 / -1; }
+
+        .disk-container {
+            position: relative; width: 280px; height: 280px; margin: 20px auto;
+        }
+
+        .disk-circle {
+            width: 100%; height: 100%; border-radius: 50%;
+            background: conic-gradient(from 0deg, rgba(255,255,255,0.1) 0deg, rgba(255,255,255,0.1) 0deg);
+            border: 3px solid rgba(255,255,255,0.3);
+            position: relative; transition: all 0.5s ease;
+        }
+
+        .disk-center {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 80px; height: 80px; border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .legend {
+            display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; margin-top: 20px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 10px; }
+        .legend-color { width: 30px; height: 30px; border-radius: 5px; border: 2px solid rgba(255,255,255,0.5); }
+
+        .arrow-line {
+            stroke-width: 3; fill: none; stroke-dasharray: 1000; stroke-dashoffset: 1000;
+            animation: drawArrow 0.6s ease-out forwards;
+        }
+        @keyframes drawArrow { to { stroke-dashoffset: 0; } }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 10px currentColor; }
+            50% { transform: scale(1.05); box-shadow: 0 0 20px currentColor; }
+        }
+        .memory-cell.active { animation: pulse 0.8s infinite; }
+
+        .status-panel {
+            background: rgba(255,255,255,0.1); border-radius: 15px; padding: 20px;
+            backdrop-filter: blur(10px); margin-top: 20px;
+        }
+        .status-item { display: flex; justify-content: space-between; margin: 10px 0; font-size: 1.1em; }
+        .progress-bar { width: 100%; height: 20px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; margin-top: 10px; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.5s ease; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖥️ Simulador de Memoria Virtual - Control de Velocidad</h1>
+        
+        <div class="controls">
+            <button id="startBtn" onclick="startSimulation()">▶️ Iniciar</button>
+            <button id="pauseBtn" onclick="pauseSimulation()" disabled>⏸️ Pausar</button>
+            <button id="resetBtn" onclick="resetSimulation()">🔄 Reiniciar</button>
+            
+            <span class="label-speed">Velocidad:</span>
+            <select id="speedSelect" onchange="changeSpeed()">
+                <option value="slow">🐢 Baja</option>
+                <option value="medium" selected>🚗 Media</option>
+                <option value="fast">🚀 Alta</option>
+            </select>
+        </div>
+
+        <div class="simulation-area">
+            <div class="memory-component">
+                <div class="component-title">🔲 CPU (Ejecución - Multiprogramación)</div>
+                <div class="cpu-grid" id="cpuGrid"></div>
+            </div>
+
+            <div class="memory-component">
+                <div class="component-title">⚡ Caché L1 (Anticipador Inteligente)</div>
+                <div class="cache-grid" id="cacheGrid"></div>
+            </div>
+
+            <div class="memory-component">
+                <div class="component-title">💾 RAM (Memoria Principal)</div>
+                <div class="ram-grid" id="ramGrid"></div>
+            </div>
+
+            <div class="memory-component">
+                <div class="component-title">💿 VRAM (Memoria Virtual / Swap)</div>
+                <div class="disk-container">
+                    <div class="disk-circle" id="diskCircle">
+                        <div class="disk-center">VRAM</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="memory-component virtual-memory-section">
+                <div>
+                    <div class="component-title">💽 Disco Duro (Historial Ejecutado)</div>
+                    <div class="hdd-grid" id="hddGrid"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color" style="background: #ff6b6b;"></div><span>Chrome</span></div>
+            <div class="legend-item"><div class="legend-color" style="background: #4ecdc4;"></div><span>VSCode</span></div>
+            <div class="legend-item"><div class="legend-color" style="background: #ffe66d;"></div><span>Spotify</span></div>
+            <div class="legend-item"><div class="legend-color" style="background: #a8e6cf;"></div><span>Discord</span></div>
+            <div class="legend-item"><div class="legend-color" style="background: #ff8c94;"></div><span>Photoshop</span></div>
+            <div class="legend-item"><div class="legend-color" style="background: #95e1d3;"></div><span>Excel</span></div>
+        </div>
+
+        <div class="status-panel">
+            <h3>📊 Estado del Sistema</h3>
+            <div class="status-item"><span>Uso de RAM:</span><span id="ramUsage">0%</span></div>
+            <div class="progress-bar"><div class="progress-fill" id="ramProgress"></div></div>
+            <div class="status-item"><span>Uso de Memoria Virtual (Saturación):</span><span id="vramUsage">0%</span></div>
+            <div class="progress-bar"><div class="progress-fill" id="vramProgress"></div></div>
+            <div class="status-item"><span>Procesos en CPU:</span><span id="cpuCount">0</span></div>
+            <div class="status-item"><span>Total Ejecutados:</span><span id="executedCount">0</span></div>
+        </div>
+    </div>
+
+    <svg id="arrowSvg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000;"></svg>
+
+    <script>
+        const processTemplates = [
+            { name: 'Chrome', color: '#ff6b6b', pages: 5 },
+            { name: 'VSCode', color: '#4ecdc4', pages: 4 },
+            { name: 'Spotify', color: '#ffe66d', pages: 3 },
+            { name: 'Discord', color: '#a8e6cf', pages: 4 },
+            { name: 'Photoshop', color: '#ff8c94', pages: 5 },
+            { name: 'Excel', color: '#95e1d3', pages: 3 }
+        ];
+
+        // Configuración de velocidades
+        const speedSettings = {
+            slow: {
+                generation: 3500,    // Nuevos procesos cada 3.5s
+                scheduler: 1500,     // CPU busca tareas cada 1.5s
+                prefetch: 1200,      // Caché anticipa cada 1.2s
+                execution: 6000,     // Tiempo de ejecución en CPU
+                animation: 800       // Pausas visuales
+            },
+            medium: {
+                generation: 1500,
+                scheduler: 600,
+                prefetch: 500,
+                execution: 3500,
+                animation: 400
+            },
+            fast: {
+                generation: 600,
+                scheduler: 200,
+                prefetch: 150,
+                execution: 1500,
+                animation: 150
+            }
+        };
+
+        let currentSpeed = speedSettings.medium;
+
+        let cpuCells = [], cacheCells = [], ramCells = [], hddCells = [];
+        let virtualMemoryProcesses = [];
+        let isRunning = false;
+        let globalOrder = 0;
+        let generationInterval, schedulerInterval, prefetchInterval;
+
+        class ProcessPage {
+            constructor(processName, color, pageNumber, globalOrder) {
+                this.processName = processName;
+                this.color = color;
+                this.pageNumber = pageNumber;
+                this.globalOrder = globalOrder;
+            }
+        }
+
+        function init() {
+            createGrid('cpuGrid', 4, cpuCells);
+            createGrid('cacheGrid', 8, cacheCells);
+            createGrid('ramGrid', 16, ramCells);
+            document.getElementById('hddGrid').innerHTML = '';
+            hddCells = [];
+            updateStatus();
+        }
+
+        function createGrid(containerId, count, cellsArray) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            cellsArray.length = 0;
+            for (let i = 0; i < count; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'memory-cell empty';
+                cell.dataset.index = i;
+                container.appendChild(cell);
+                cellsArray.push(cell);
+            }
+        }
+
+        function changeSpeed() {
+            const selected = document.getElementById('speedSelect').value;
+            currentSpeed = speedSettings[selected];
+            
+            // Si está corriendo, reiniciamos los intervalos para aplicar la nueva velocidad
+            if (isRunning) {
+                clearInterval(schedulerInterval);
+                clearInterval(prefetchInterval);
+                clearTimeout(generationInterval);
+                
+                // Reiniciar ciclos con nuevos tiempos
+                schedulerInterval = setInterval(runCpuScheduler, currentSpeed.scheduler);
+                prefetchInterval = setInterval(runCachePrefetcher, currentSpeed.prefetch);
+                runProcessGenerator(); // Reinicia el ciclo de generación
+            }
+        }
+
+        function startSimulation() {
+            if(isRunning) return;
+            isRunning = true;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('pauseBtn').disabled = false;
+            document.getElementById('speedSelect').disabled = false;
+            
+            // Usamos los tiempos de la velocidad actual
+            runProcessGenerator();
+            schedulerInterval = setInterval(runCpuScheduler, currentSpeed.scheduler);
+            prefetchInterval = setInterval(runCachePrefetcher, currentSpeed.prefetch);
+        }
+
+        function pauseSimulation() {
+            isRunning = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('pauseBtn').disabled = true;
+            clearTimeout(generationInterval);
+            clearInterval(schedulerInterval);
+            clearInterval(prefetchInterval);
+        }
+
+        function resetSimulation() {
+            pauseSimulation();
+            globalOrder = 0;
+            virtualMemoryProcesses = [];
+            [cpuCells, cacheCells, ramCells].forEach(grid => {
+                grid.forEach(cell => clearCell(cell));
+            });
+            document.getElementById('hddGrid').innerHTML = '';
+            hddCells = [];
+            updateDisk([]);
+            updateStatus();
+        }
+
+        // --- Generador de Procesos ---
+        async function runProcessGenerator() {
+            if (!isRunning) return;
+
+            const template = processTemplates[Math.floor(Math.random() * processTemplates.length)];
+            await loadNewProcess(template);
+            
+            if (isRunning) {
+                generationInterval = setTimeout(runProcessGenerator, currentSpeed.generation);
+            }
+        }
+
+        async function loadNewProcess(template) {
+            globalOrder++;
+            const pages = [];
+            for (let i = 1; i <= template.pages; i++) {
+                pages.push(new ProcessPage(template.name, template.color, i, globalOrder));
+            }
+            
+            const ramSpace = ramCells.filter(c => c.classList.contains('empty')).length;
+            
+            if (ramSpace >= pages.length) {
+                for (let page of pages) {
+                    const cell = ramCells.find(c => c.classList.contains('empty'));
+                    if (cell) fillCell(cell, page);
+                    await sleep(currentSpeed.animation / 4);
+                }
+            } else {
+                virtualMemoryProcesses.push({
+                    name: template.name, 
+                    color: template.color, 
+                    pages: pages
+                });
+                updateDisk(virtualMemoryProcesses);
+            }
+            updateStatus();
+        }
+
+        // --- Planificador CPU ---
+        async function runCpuScheduler() {
+            if (!isRunning) return;
+
+            const emptyCpu = cpuCells.find(c => c.classList.contains('empty'));
+            if (!emptyCpu) return;
+
+            const cacheCandidate = findCandidate(cacheCells);
+            if (cacheCandidate) {
+                await moveToCpu(cacheCandidate, emptyCpu);
+                return;
+            }
+
+            const ramCandidate = findCandidate(ramCells);
+            if (ramCandidate) {
+                await moveToCpu(ramCandidate, emptyCpu);
+            }
+
+            checkSwapFromDisk();
+        }
+
+        function findCandidate(gridCells) {
+            const candidates = gridCells
+                .filter(c => !c.classList.contains('empty') && !c.classList.contains('moving'))
+                .sort((a, b) => {
+                    const orderA = parseInt(a.querySelector('.cell-order').textContent);
+                    const orderB = parseInt(b.querySelector('.cell-order').textContent);
+                    return orderA - orderB;
+                });
+
+            return candidates.find(cell => {
+                const pName = cell.dataset.processName;
+                const isRunning = cpuCells.some(cpuC => !cpuC.classList.contains('empty') && cpuC.dataset.processName === pName);
+                return !isRunning;
+            });
+        }
+
+        // --- Anticipador de Caché ---
+        async function runCachePrefetcher() {
+            if (!isRunning) return;
+
+            const emptyCache = cacheCells.find(c => c.classList.contains('empty'));
+            if (!emptyCache) return;
+
+            const activeProcesses = cpuCells
+                .filter(c => !c.classList.contains('empty'))
+                .map(c => c.dataset.processName);
+
+            const idealCandidate = ramCells.find(cell => {
+                return !cell.classList.contains('empty') && 
+                       !cell.classList.contains('moving') &&
+                       activeProcesses.includes(cell.dataset.processName);
+            });
+
+            if (idealCandidate) {
+                idealCandidate.classList.add('moving');
+                await moveCell(idealCandidate, emptyCache);
+            } else {
+                const oldestRam = ramCells
+                    .filter(c => !c.classList.contains('empty') && !c.classList.contains('moving'))
+                    .sort((a, b) => parseInt(a.querySelector('.cell-order').textContent) - parseInt(b.querySelector('.cell-order').textContent))[0];
+                
+                if (oldestRam) {
+                    oldestRam.classList.add('moving');
+                    await moveCell(oldestRam, emptyCache);
+                }
+            }
+        }
+
+        async function moveCell(from, to) {
+            drawArrow(from, to, from.style.background);
+            await sleep(currentSpeed.animation);
+            
+            to.style.background = from.style.background;
+            to.innerHTML = from.innerHTML;
+            to.className = 'memory-cell';
+            to.dataset.processName = from.dataset.processName;
+            to.dataset.pageNumber = from.dataset.pageNumber;
+
+            clearCell(from);
+        }
+
+        async function moveToCpu(sourceCell, targetCpu) {
+            sourceCell.classList.add('moving');
+            const color = sourceCell.style.background;
+            const html = sourceCell.innerHTML;
+            const pName = sourceCell.dataset.processName;
+
+            drawArrow(sourceCell, targetCpu, color);
+            clearCell(sourceCell);
+            
+            await sleep(currentSpeed.animation);
+
+            targetCpu.style.background = color;
+            targetCpu.innerHTML = html;
+            targetCpu.classList.remove('empty');
+            targetCpu.classList.add('active');
+            targetCpu.dataset.processName = pName;
+
+            setTimeout(() => finishCpuExecution(targetCpu), currentSpeed.execution);
+        }
+
+        async function finishCpuExecution(cpuCell) {
+            if (!isRunning && cpuCell.classList.contains('empty')) return;
+
+            const hddContainer = document.getElementById('hddGrid');
+            const newHddCell = document.createElement('div');
+            newHddCell.className = 'memory-cell';
+            newHddCell.style.background = cpuCell.style.background;
+            newHddCell.innerHTML = cpuCell.innerHTML;
+
+            drawArrow(cpuCell, hddContainer, cpuCell.style.background);
+            
+            cpuCell.style.opacity = '0.5';
+            await sleep(currentSpeed.animation);
+            cpuCell.style.opacity = '1';
+
+            hddContainer.appendChild(newHddCell);
+            hddContainer.scrollTop = hddContainer.scrollHeight;
+            hddCells.push(newHddCell);
+
+            clearCell(cpuCell);
+        }
+
+        async function checkSwapFromDisk() {
+            const emptyRam = ramCells.find(c => c.classList.contains('empty'));
+            if (emptyRam && virtualMemoryProcesses.length > 0) {
+                const proc = virtualMemoryProcesses[0];
+                const page = proc.pages.shift();
+                
+                const disk = document.getElementById('diskCircle');
+                drawArrow(disk, emptyRam, page.color);
+                await sleep(currentSpeed.animation);
+                
+                fillCell(emptyRam, page);
+                
+                if (proc.pages.length === 0) virtualMemoryProcesses.shift();
+                updateDisk(virtualMemoryProcesses);
+            }
+        }
+
+        function fillCell(cell, page) {
+            cell.style.background = page.color;
+            cell.innerHTML = `<div class="cell-order">${page.globalOrder}</div><div class="cell-content">${page.processName}<br>(${page.pageNumber})</div>`;
+            cell.classList.remove('empty');
+            cell.dataset.processName = page.processName;
+            cell.dataset.pageNumber = page.pageNumber;
+        }
+
+        function clearCell(cell) {
+            cell.className = 'memory-cell empty';
+            cell.style.background = '';
+            cell.innerHTML = '';
+            delete cell.dataset.processName;
+            delete cell.dataset.pageNumber;
+            delete cell.dataset.moving;
+        }
+
+        function drawArrow(from, to, color) {
+            const svg = document.getElementById('arrowSvg');
+            const f = from.getBoundingClientRect();
+            const t = to.getBoundingClientRect();
+            const scrollX = window.pageXOffset;
+            const scrollY = window.pageYOffset;
+
+            const x1 = f.left + f.width/2 + scrollX;
+            const y1 = f.top + f.height/2 + scrollY;
+            const x2 = t.left + t.width/2 + scrollX;
+            const y2 = t.top + t.height/2 + scrollY;
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            const d = `M ${x1} ${y1} Q ${(x1+x2)/2} ${(y1+y2)/2 - 50} ${x2} ${y2}`;
+            path.setAttribute('d', d);
+            path.setAttribute('class', 'arrow-line');
+            path.style.stroke = color;
+            
+            svg.appendChild(path);
+            setTimeout(() => path.remove(), 600);
+        }
+
+        function updateDisk(procs) {
+            const disk = document.getElementById('diskCircle');
+            if (procs.length === 0) {
+                disk.style.background = 'conic-gradient(from 0deg, rgba(255,255,255,0.1) 0deg, rgba(255,255,255,0.1) 360deg)';
+            } else {
+                let gradient = 'conic-gradient(from 0deg';
+                const step = 360 / Math.max(1, procs.length);
+                procs.forEach((p, i) => {
+                    gradient += `, ${p.color} ${i*step}deg ${(i+1)*step}deg`;
+                });
+                gradient += ')';
+                disk.style.background = gradient;
+            }
+        }
+
+        function updateStatus() {
+            const rUsed = ramCells.filter(c => !c.classList.contains('empty')).length;
+            const rPerc = Math.round((rUsed/16)*100);
+            document.getElementById('ramUsage').textContent = rPerc + '%';
+            document.getElementById('ramProgress').style.width = rPerc + '%';
+
+            let vPages = 0;
+            virtualMemoryProcesses.forEach(p => vPages += p.pages.length);
+            const vPerc = Math.min(100, vPages * 5);
+            document.getElementById('vramUsage').textContent = vPerc + '%';
+            document.getElementById('vramProgress').style.width = vPerc + '%';
+
+            document.getElementById('cpuCount').textContent = cpuCells.filter(c => !c.classList.contains('empty')).length;
+            document.getElementById('executedCount').textContent = hddCells.length;
+        }
+
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        init();
+    </script>
+</body>
+</html>
+```
